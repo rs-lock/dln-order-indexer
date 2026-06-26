@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use clickhouse::Client;
 
 use crate::{
-    application::indexer::{CursorRepo, OrdersRepo},
+    application::ports::{CursorRepo, OrdersRepo},
     domain::order::OrderEvent,
     infra::clickhouse::models::OrderRow,
 };

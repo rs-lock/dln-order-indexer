@@ -4,7 +4,7 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    application::indexer::{CursorRepo, Rpc},
+    application::ports::{CursorRepo, Rpc},
     domain::transaction::Transaction,
 };
 

@@ -3,10 +3,18 @@ use std::{
     time::{Duration, Instant},
 };
 
+use thiserror::Error;
+
 pub struct CircuitBreaker {
     state: Mutex<State>,
     failure_threshold: u32,
     timeout: Duration,
+}
+
+#[derive(Error, Debug)]
+enum CircuitBreakerError {
+    #[error("Circuit breaker is open")]
+    Open,
 }
 
 impl CircuitBreaker {

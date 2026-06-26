@@ -13,7 +13,10 @@ use solana_sdk::{
 
 use solana_transaction_status_client_types::EncodedTransactionWithStatusMeta;
 
-use crate::{application::indexer::Rpc, domain::transaction::Transaction};
+use crate::{
+    application::ports::{Rpc, RpcError},
+    domain::transaction::Transaction,
+};
 
 pub struct SolClient {
     rpc: RpcClient,
@@ -71,7 +74,7 @@ impl Rpc for SolClient {
         program: String,
         cursor_tx: &str,
         limit: u32,
-    ) -> anyhow::Result<Vec<String>> {
+    ) -> Result<Vec<String>, RpcError> {
         let res = self
             .rpc
             .get_signatures_for_address_with_config(
@@ -81,7 +84,8 @@ impl Rpc for SolClient {
                     ..Default::default()
                 },
             )
-            .await?
+            .await
+            .map_err(anyhow::Error::from)?
             .into_iter()
             .map(|sign| sign.signature)
             .collect();
@@ -89,7 +93,7 @@ impl Rpc for SolClient {
         Ok(res)
     }
 
-    async fn get_transaction_batch(&self, sig: &str) -> anyhow::Result<Vec<String>> {
+    async fn get_transaction_batch(&self, sig: &str) -> Result<Vec<String>, RpcError> {
         Ok(vec![])
     }
 }

@@ -1,8 +1,7 @@
-use anyhow::Ok;
 use async_trait::async_trait;
 
 use crate::{
-    application::indexer::Rpc,
+    application::ports::{Rpc, RpcError},
     infra::{circuit_breaker::CircuitBreaker, rate_limiter::RateLimiter},
 };
 
@@ -24,18 +23,25 @@ where
         }
     }
 
-    fn handle_error(&self, error: solana_client::client_error::ClientError) {
-        match error.kind {
-            solana_client::client_error::ClientErrorKind::RpcError(rpc_error) => match rpc_error {
-                solana_client::rpc_request::RpcError::RpcResponseError {
-                    code,
-                    message,
-                    data,
-                } => if code == 429 {},
-                _ => todo!(),
-            },
-            _ => todo!(),
+    async fn with_guard<Fut, T>(&self, fut: Fut) -> Result<T, RpcError>
+    where
+        Fut: Future<Output = Result<T, RpcError>> + Send,
+    {
+        if !self.circuit_breaker.allow_request() {
+            return Err(RpcError::CircuitOpen);
         }
+
+        self.rate_limiter.until_ready().await;
+
+        let res = fut.await;
+
+        match &res {
+            Ok(_) => self.circuit_breaker.handle_success(),
+            Err(_) => {
+                self.circuit_breaker.handle_failure();
+            }
+        }
+        res
     }
 }
 
@@ -49,22 +55,13 @@ where
         program: String,
         cursor_tx: &str,
         limit: u32,
-    ) -> anyhow::Result<Vec<String>> {
-        let true = self.circuit_breaker.allow_request() else {
-            return Ok(vec![]);
-        };
-
-        self.rate_limiter.until_ready().await;
-
-        self.client.get_signatures(program, cursor_tx, limit).await
+    ) -> Result<Vec<String>, RpcError> {
+        self.with_guard(self.client.get_signatures(program, cursor_tx, limit))
+            .await
     }
 
-    async fn get_transaction_batch(&self, sig: &str) -> anyhow::Result<Vec<String>> {
-        let true = self.circuit_breaker.allow_request() else {
-            return Ok(vec![]);
-        };
-
-        self.rate_limiter.until_ready().await;
-        self.client.get_transaction_batch(sig).await
+    async fn get_transaction_batch(&self, sig: &str) -> Result<Vec<String>, RpcError> {
+        self.with_guard(self.client.get_transaction_batch(sig))
+            .await
     }
 }
