@@ -1,11 +1,7 @@
-use async_trait::async_trait;
 use tokio::sync::{broadcast, mpsc::channel};
 use tokio_util::sync::CancellationToken;
 
-use crate::{
-    application::worker::Worker,
-    domain::{order::OrderEvent, transaction::Transaction},
-};
+use crate::{application::worker::Worker, domain::transaction::Transaction};
 
 struct Indexer {
     workers: Vec<Worker>,
@@ -29,26 +25,4 @@ impl Indexer {
         }
         Ok(())
     }
-}
-
-#[async_trait]
-pub trait Rpc {
-    async fn get_signatures(
-        &self,
-        program: String,
-        cursor_tx: &str,
-        limit: u32,
-    ) -> anyhow::Result<Vec<String>>;
-    async fn get_transaction_batch(&self, sig: &str) -> anyhow::Result<Vec<String>>;
-}
-
-#[async_trait]
-pub trait OrdersRepo {
-    async fn insert_events(&self, events: Vec<OrderEvent>) -> anyhow::Result<()>;
-}
-
-#[async_trait]
-pub trait CursorRepo {
-    async fn load_cursor(&self) -> anyhow::Result<Option<String>>;
-    async fn save_cursor(&self, cursor: &str) -> anyhow::Result<()>;
 }

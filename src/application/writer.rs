@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc::Receiver;
 
-use crate::{application::indexer::OrdersRepo, domain::transaction::Transaction};
+use crate::{application::ports::OrdersRepo, domain::transaction::Transaction};
 
 struct Writer {
     receiver: Receiver<Transaction>,
