@@ -15,3 +15,15 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 num_cpus = "1.17.0"
 tokio-util = "0.7.18"
 thiserror = "2.0.18"
+anyhow = "1.0.102"
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli"] }
+solana-client = "2.2"
+solana-sdk = "2.2"
+solana-rpc-client-api = "2.2"
+solana-transaction-status-client-types = { version = "2.3.13" }
+borsh = { version = "1", features = ["derive"] }
+base64 = "0.22.1"
+sha2 = "0.10"
+governor = "0.10.4"
+nonzero_ext = "0.3"
+async-trait = "0.1.89"
