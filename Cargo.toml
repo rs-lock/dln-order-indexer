@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+chrono = { version = "0.4.44", features = ["serde"] }
 clickhouse = { version = "0.15.0", features = ["uuid", "chrono"] }
 dotenvy = "0.15.7"
 serde = { version = "1", features = ["derive"] }

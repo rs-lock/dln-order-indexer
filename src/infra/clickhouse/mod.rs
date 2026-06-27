@@ -1,2 +1,2 @@
-mod models;
+mod rows;
 pub mod repo;
