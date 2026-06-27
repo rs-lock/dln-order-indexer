@@ -2,6 +2,7 @@ use async_trait::async_trait;
 
 use crate::{
     application::ports::{Rpc, RpcError},
+    domain::transaction::Transaction,
     infra::{circuit_breaker::CircuitBreaker, rate_limiter::RateLimiter},
 };
 
@@ -52,16 +53,15 @@ where
 {
     async fn get_signatures(
         &self,
-        program: String,
-        cursor_tx: &str,
-        limit: u32,
+        program: &str,
+        cursor_tx: Option<&str>,
+        limit: Option<usize>,
     ) -> Result<Vec<String>, RpcError> {
         self.with_guard(self.client.get_signatures(program, cursor_tx, limit))
             .await
     }
 
-    async fn get_transaction_batch(&self, sig: &str) -> Result<Vec<String>, RpcError> {
-        self.with_guard(self.client.get_transaction_batch(sig))
-            .await
+    async fn get_transaction(&self, sig: &str) -> Result<Option<Transaction>, RpcError> {
+        self.with_guard(self.client.get_transaction(sig)).await
     }
 }

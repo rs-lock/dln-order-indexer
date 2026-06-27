@@ -1,4 +1,4 @@
-use crate::domain::order::OrderEvent;
+use crate::domain::{order::EnrichedEvent, transaction::Transaction};
 use async_trait::async_trait;
 
 #[derive(thiserror::Error, Debug)]
@@ -7,23 +7,27 @@ pub enum RpcError {
     CircuitOpen,
     #[error(transparent)]
     Transport(#[from] anyhow::Error),
+    #[error("invalid cursor signature: {0}")]
+    InvalidCursor(String),
+    #[error("invalid program id: {0}")]
+    InvalidProgramId(String),
 }
 
 #[async_trait]
 pub trait Rpc {
     async fn get_signatures(
         &self,
-        program: String,
-        cursor_tx: &str,
-        limit: u32,
+        program: &str,
+        cursor_tx: Option<&str>,
+        limit: Option<usize>,
     ) -> Result<Vec<String>, RpcError>;
 
-    async fn get_transaction_batch(&self, sig: &str) -> Result<Vec<String>, RpcError>;
+    async fn get_transaction(&self, sigs: &str) -> Result<Option<Transaction>, RpcError>;
 }
 
 #[async_trait]
 pub trait OrdersRepo {
-    async fn insert_events(&self, events: Vec<OrderEvent>) -> anyhow::Result<()>;
+    async fn insert_events(&self, events: &[EnrichedEvent]) -> anyhow::Result<()>;
 }
 
 #[async_trait]

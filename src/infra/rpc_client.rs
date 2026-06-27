@@ -1,4 +1,4 @@
-use std::{collections::VecDeque, str::FromStr};
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use solana_client::{
@@ -11,7 +11,7 @@ use solana_sdk::{
     signature::Signature,
 };
 
-use solana_transaction_status_client_types::EncodedTransactionWithStatusMeta;
+use solana_transaction_status_client_types::EncodedConfirmedTransactionWithStatusMeta;
 
 use crate::{
     application::ports::{Rpc, RpcError},
@@ -28,59 +28,49 @@ impl SolClient {
             rpc: RpcClient::new(crate::SOL_RPC.to_string()),
         }
     }
-
-    async fn get_transactions_batch(
-        &self,
-        signatures: VecDeque<String>,
-    ) -> anyhow::Result<Vec<Transaction>> {
-        let mut txs = vec![];
-        let signature = signatures.clone().pop_front().unwrap();
-        let tx = self
-            .rpc
-            .get_transaction_with_config(
-                &Signature::from_str(&signature)?,
-                RpcTransactionConfig {
-                    commitment: Some(CommitmentConfig {
-                        commitment: CommitmentLevel::Confirmed,
-                    }),
-                    max_supported_transaction_version: Some(0),
-                    ..Default::default()
-                },
-            )
-            .await;
-
-        match tx {
-            Ok(tx) => txs.push(map_transaction(tx.transaction, signature)),
-            Err(err) => tracing::warn!(%signature, %err, "failed to fetch transaction"),
-        }
-        Ok(txs)
-    }
 }
 
-fn map_transaction(tx: EncodedTransactionWithStatusMeta, signature: String) -> Transaction {
-    Transaction {
+fn map_transaction(
+    tx: EncodedConfirmedTransactionWithStatusMeta,
+    signature: Signature,
+) -> Option<Transaction> {
+    let blocktime = tx.block_time?;
+    let tx = Transaction {
         signature,
         logs: tx
+            .transaction
             .meta
             .and_then(|meta| Option::from(meta.log_messages))
             .unwrap_or_default(),
-    }
+        blocktime,
+    };
+    Some(tx)
 }
 
 #[async_trait]
 impl Rpc for SolClient {
     async fn get_signatures(
         &self,
-        program: String,
-        cursor_tx: &str,
-        limit: u32,
+        program: &str,
+        cursor_tx: Option<&str>,
+        limit: Option<usize>,
     ) -> Result<Vec<String>, RpcError> {
+        let before = cursor_tx
+            .map(Signature::from_str)
+            .transpose()
+            .map_err(|e| RpcError::InvalidCursor(e.to_string()))?;
+
+        let program =
+            Pubkey::from_str(program).map_err(|e| RpcError::InvalidProgramId(e.to_string()))?;
+
         let res = self
             .rpc
             .get_signatures_for_address_with_config(
-                &Pubkey::from_str(&program).unwrap(),
+                &program,
                 GetConfirmedSignaturesForAddress2Config {
-                    limit: Some(1),
+                    before,
+                    limit,
+                    commitment: Some(CommitmentConfig::finalized()),
                     ..Default::default()
                 },
             )
@@ -93,7 +83,25 @@ impl Rpc for SolClient {
         Ok(res)
     }
 
-    async fn get_transaction_batch(&self, sig: &str) -> Result<Vec<String>, RpcError> {
-        Ok(vec![])
+    async fn get_transaction(&self, sig: &str) -> Result<Option<Transaction>, RpcError> {
+        let signature = Signature::from_str(sig).expect("Signatures comes valid from rpc");
+        let tx_res = self
+            .rpc
+            .get_transaction_with_config(
+                &signature,
+                RpcTransactionConfig {
+                    commitment: Some(CommitmentConfig {
+                        commitment: CommitmentLevel::Finalized,
+                    }),
+                    max_supported_transaction_version: Some(0),
+                    ..Default::default()
+                },
+            )
+            .await;
+
+        match tx_res {
+            Ok(tx) => Ok(map_transaction(tx, signature)),
+            Err(e) => Err(RpcError::Transport(anyhow::Error::from(e))),
+        }
     }
 }
