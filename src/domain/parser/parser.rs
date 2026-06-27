@@ -3,30 +3,37 @@ use borsh::BorshDeserialize;
 use sha2::Digest;
 use solana_sdk::pubkey::Pubkey;
 
-use crate::{
-    domain::order::{OrderCreated, OrderEvent, OrderFulfilled},
-    infra::parser::events::{CreatedOrderEvent, CreatedOrderIdEvent, Events, FulfilledEvent},
+use crate::domain::{
+    order::{EnrichedEvent, OrderCreated, OrderEvent, OrderFulfilled},
+    parser::events::{CreatedOrderEvent, CreatedOrderIdEvent, Events, FulfilledEvent},
+    transaction::Transaction,
 };
 
 const PROGRAM_DATA_PREFIX: &str = "Program data: ";
 
-pub fn parse_tx(data: Vec<String>) -> Vec<OrderEvent> {
-    let raw_events: Vec<Events> = data
+pub fn parse_transaction(tx: &Transaction) -> EnrichedEvent {
+    let raw_events: Vec<Events> = tx
+        .logs
         .iter()
         .filter_map(|line| decode_program_data(line))
         .filter_map(|bytes| parse_event(&bytes))
         .collect();
-    map_events(&raw_events)
+    let events = map_events(&raw_events);
+    EnrichedEvent {
+        signature: tx.signature,
+        order_events: events,
+        blocktime: tx.blocktime,
+    }
 }
 
-pub fn decode_program_data(line: &str) -> Option<Vec<u8>> {
+fn decode_program_data(line: &str) -> Option<Vec<u8>> {
     let stripped_b64 = line.strip_prefix(PROGRAM_DATA_PREFIX)?;
     base64::engine::general_purpose::STANDARD
         .decode(stripped_b64)
         .ok()
 }
 
-pub fn parse_event(bytes: &[u8]) -> Option<Events> {
+fn parse_event(bytes: &[u8]) -> Option<Events> {
     let (disc, rest) = bytes.split_at_checked(8)?;
 
     if disc == event_discriminator("Fulfilled") {
@@ -47,7 +54,7 @@ pub fn parse_event(bytes: &[u8]) -> Option<Events> {
     None
 }
 
-pub fn map_events(events: &[Events]) -> Vec<OrderEvent> {
+fn map_events(events: &[Events]) -> Vec<OrderEvent> {
     let mut order_events = vec![];
 
     for idx in 0..events.len() {
@@ -108,14 +115,19 @@ fn try_build_created(order: &CreatedOrderEvent, id: [u8; 32]) -> Option<OrderCre
 
 #[cfg(test)]
 mod tests {
-    use solana_sdk::pubkey::Pubkey;
+    use solana_sdk::signature::Signature;
 
     use super::*;
 
     #[test]
     fn parse_fulfilled() {
         let logs = vec!["Program data: 0q6D1Si2U25xJg6fclWE4Mg65YKWB9zfviorRehVNFseLrrf3hE6DBvd7TdfV8J3SPCc5St6bi3Eb2wE1h2kflV0fk/tfnkx".to_string()];
-        let events = parse_tx(logs);
+        let tx = Transaction {
+            signature: Signature::new_unique(),
+            logs,
+            blocktime: 0,
+        };
+        let events = parse_transaction(&tx).order_events;
         let OrderEvent::Fulfilled(f) = events.first().unwrap() else {
             panic!("expected Fulfilled");
         };
@@ -140,7 +152,12 @@ mod tests {
             "Program data: aldK5iB4R9JjVIcInwEAACAAAABtpy2XFQT8HHppHw5pew3wrUrAZlBlxPm2CJoZnTzj0gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAc29sIAAAAMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGMHLwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiRQAAADCEy0F0xyRSofGYRwQdIrrBLWOjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABgECRFAAAAGpPw5oHq3kyBJZkESLbLbPBTTCLIAAAAG2nLZcVBPwcemkfDml7DfCtSsBmUGXE+bYImhmdPOPSFAAAAAdG5+TRXzCIVha0rD0nQ5M1ToDAARQAAABVXOI2wCIGlbaDQbxIxo1SIQzDWwEgAAAAbactlxUE/Bx6aR8OaXsN8K1KwGZQZcT5tgiaGZ0849IAwOHkAAAAAACUKAAAAAAAAA==".to_string(),
             "Program data: uykbSQw/DVTF/aEMklxhaGGpnFy6FSVZh5tFSzODeuK4AJv2wDnDxA==".to_string()
         ];
-        let events = parse_tx(logs);
+        let tx = Transaction {
+            signature: Signature::new_unique(),
+            logs,
+            blocktime: 0,
+        };
+        let events = parse_transaction(&tx).order_events;
 
         let OrderEvent::Created(order) = events.first().unwrap() else {
             panic!("expected created");
