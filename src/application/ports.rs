@@ -13,8 +13,24 @@ pub enum RpcError {
     InvalidProgramId(String),
 }
 
+impl RpcError {
+    pub fn is_transient(&self) -> bool {
+        matches!(self, RpcError::Transport(_) | RpcError::CircuitOpen)
+    }
+}
+
+pub enum WriteError {
+    Transient(anyhow::Error),
+    Permanent(anyhow::Error),
+}
+
+pub enum WriterMsg {
+    Data(EnrichedEvent),
+    Checkpoint { program: String, signature: String },
+}
+
 #[async_trait]
-pub trait Rpc {
+pub trait Rpc: Send + Sync {
     async fn get_signatures(
         &self,
         program: &str,
@@ -26,12 +42,12 @@ pub trait Rpc {
 }
 
 #[async_trait]
-pub trait OrdersRepo {
-    async fn insert_events(&self, events: &[EnrichedEvent]) -> anyhow::Result<()>;
+pub trait OrdersRepo: Send + Sync {
+    async fn insert_events(&self, events: &[EnrichedEvent]) -> Result<(), WriteError>;
 }
 
 #[async_trait]
-pub trait CursorRepo {
-    async fn load_cursor(&self) -> anyhow::Result<Option<String>>;
-    async fn save_cursor(&self, cursor: &str) -> anyhow::Result<()>;
+pub trait CursorRepo: Send + Sync {
+    async fn load_cursor(&self, program: &str) -> anyhow::Result<Option<String>>;
+    async fn save_cursor(&self, cursor: &str, program: &str) -> anyhow::Result<()>;
 }
