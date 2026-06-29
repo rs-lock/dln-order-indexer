@@ -23,9 +23,9 @@ pub struct SolClient {
 }
 
 impl SolClient {
-    pub fn new() -> Self {
+    pub fn new(rpc_url: String) -> Self {
         Self {
-            rpc: RpcClient::new(crate::SOL_RPC.to_string()),
+            rpc: RpcClient::new(rpc_url),
         }
     }
 }
@@ -101,7 +101,10 @@ impl Rpc for SolClient {
 
         match tx_res {
             Ok(tx) => Ok(map_transaction(tx, signature)),
-            Err(e) => Err(RpcError::Transport(anyhow::Error::from(e))),
+            Err(e) => {
+                tracing::info!(%e, " get tx request");
+                Err(RpcError::Transport(anyhow::Error::from(e)))
+            }
         }
     }
 }
