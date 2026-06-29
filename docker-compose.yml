@@ -1,0 +1,48 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse-config/users.d:/etc/clickhouse-server/users.d
+
+    environment:
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+    restart: unless-stopped
+
+  tabix:
+    image: spoonest/clickhouse-tabix-web-client
+    ports:
+      - "8088:80"
+    depends_on:
+      - clickhouse
+
+  ingestion:
+    build: .
+    container_name: ingestion
+    command: ["ingestion"]
+    env_file: .env
+    environment:
+      INGESTION_BIND: 0.0.0.0:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:

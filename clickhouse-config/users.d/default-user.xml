@@ -1,0 +1,14 @@
+<clickhouse>
+  <!-- Docs: <https://clickhouse.com/docs/en/operations/settings/settings_users/> -->
+  <users>
+    <default>
+      <!-- Local dev: the app runs on the host and reaches CH via the Docker bridge
+           gateway IP (not 127.0.0.1). The stock image restricts `default` to
+           localhost, so without this the host connection is rejected (516).
+           DO NOT use ::/0 in production — there restrict the network and set a password. -->
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
