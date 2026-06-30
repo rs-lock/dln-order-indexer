@@ -117,6 +117,8 @@ fn try_build_created(order: &CreatedOrderEvent, id: [u8; 32]) -> Option<OrderCre
 mod tests {
     use solana_sdk::signature::Signature;
 
+    use crate::domain::parser::events::{Offer, Order};
+
     use super::*;
 
     #[test]
@@ -176,5 +178,79 @@ mod tests {
             order.give_token.to_string(),
             "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
         );
+    }
+
+    #[test]
+    fn empty_events_in_empty_logs() {
+        let logs = vec![];
+
+        let tx = Transaction {
+            signature: Signature::new_unique(),
+            logs,
+            blocktime: 0,
+        };
+        let events = parse_transaction(&tx).order_events;
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn spam_logs_without_program_data() {
+        let logs = vec![" data: ==".to_string(), "==".to_string()];
+        let tx = Transaction {
+            signature: Signature::new_unique(),
+            logs,
+            blocktime: 0,
+        };
+        let events = parse_transaction(&tx).order_events;
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn created_order_without_following_order_id() {
+        let logs = vec![
+            "Program data: aldK5iB4R9JjVIcInwEAACAAAABtpy2XFQT8HHppHw5pew3wrUrAZlBlxPm2CJoZnTzj0gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAc29sIAAAAMb6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGMHLwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiRQAAADCEy0F0xyRSofGYRwQdIrrBLWOjwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABgECRFAAAAGpPw5oHq3kyBJZkESLbLbPBTTCLIAAAAG2nLZcVBPwcemkfDml7DfCtSsBmUGXE+bYImhmdPOPSFAAAAAdG5+TRXzCIVha0rD0nQ5M1ToDAARQAAABVXOI2wCIGlbaDQbxIxo1SIQzDWwEgAAAAbactlxUE/Bx6aR8OaXsN8K1KwGZQZcT5tgiaGZ0849IAwOHkAAAAAACUKAAAAAAAAA==".to_string(),
+            "Program data: ".to_string()
+        ];
+        let tx = Transaction {
+            signature: Signature::new_unique(),
+            logs,
+            blocktime: 0,
+        };
+        let events = parse_transaction(&tx).order_events;
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn overflow_u256() {
+        let mut amount = [0u8; 32];
+        amount[0] = 1; // upper bytes non-zero → overflow
+
+        let event = CreatedOrderEvent {
+            order: Order {
+                make_order_nonce: 0,
+                maker_src: vec![],
+                give: Offer {
+                    chain_id: [0; 32],
+                    mint: vec![0; 32],
+                    amount,
+                },
+                take: Offer {
+                    chain_id: [0; 32],
+                    mint: vec![0; 32],
+                    amount: [0; 32],
+                },
+                receiver_dst: vec![],
+                give_patch_authority_src: vec![],
+                order_authority_address_dst: vec![],
+                allowed_taker_dst: None,
+                allowed_cancel_beneficiary_src: None,
+                external_call: None,
+            },
+            fix_fee: 0,
+            percent_fee: 0,
+        };
+
+        let result = try_build_created(&event, [0u8; 32]);
+        assert!(result.is_none());
     }
 }

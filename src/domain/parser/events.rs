@@ -46,6 +46,6 @@ pub struct Offer {
 }
 
 #[derive(BorshDeserialize)]
-struct ExternalCallParams {
+pub struct ExternalCallParams {
     pub external_call_shortcut: [u8; 32],
 }
