@@ -13,11 +13,13 @@ export async function GET(request: Request) {
     const to = searchParams.get("to") ?? now.toISOString().split("T")[0];
 
     const result = await clickhouse.query({
-        query: `SELECT date, give_token, SUM(give_amount) / 1000000 as total_amount
-                FROM created
+        query: `SELECT date,
+                SUM(give_amount / pow(10, decimals) * price_usd) AS total_usd
+                FROM created FINAL
                 WHERE date >= {from:Date} AND date <= {to:Date}
-                GROUP BY date, give_token
-                ORDER BY date 
+                AND price_usd IS NOT NULL
+                GROUP BY date
+                ORDER BY date
         `,
         query_params: {
             from,

@@ -32,7 +32,7 @@ export default function Home() {
       const byDate: Record<string, { created: number; fulfilled: number }> = {};
 
       for (const row of createdRows) {
-        byDate[row.date] = { created: Number(row.total_amount), fulfilled: 0 };
+        byDate[row.date] = { created: Number(row.total_usd), fulfilled: 0 };
       }
       for (const row of fulfilledRows) {
         if (!byDate[row.date]) byDate[row.date] = { created: 0, fulfilled: 0 };
