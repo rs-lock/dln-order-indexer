@@ -1,6 +1,6 @@
 # DLN Order Indexer
 
-Backfill indexer for [deBridge DLN](https://docs.dln.trade/) cross-chain orders on Solana. Reads on-chain transactions, parses `OrderCreated` and `OrderFulfilled` events, stores them in ClickHouse, and serves a dashboard.
+Backfill indexer for [deBridge DLN](https://docs.dln.trade/) cross-chain orders on Solana. Reads on-chain transactions, parses `OrderCreated` and `OrderFulfilled` events, enriches them with USD prices via Jupiter, stores them in ClickHouse, and serves a dashboard.
 
 ## Architecture
 
@@ -12,9 +12,10 @@ Backfill indexer for [deBridge DLN](https://docs.dln.trade/) cross-chain orders 
   ┌─────▼──────────────────────────────────┐
   │  Ingestion Process (Rust)              │
   │                                        │
-  │  Worker(SRC) ──┐                       │
-  │                ├─► mpsc ──► Writer ──► ClickHouse
+  │  Worker(SRC) ──┬─► mpsc ──► Writer ──► ClickHouse
   │  Worker(DST) ──┘                       │
+  │       │                                │
+  │  Jupiter API (price oracle)            │
   │                                        │
   │  SafeRpc = RateLimiter + CircuitBreaker│
   └────────────────────────────────────────┘
@@ -76,6 +77,10 @@ The cursor is loaded from ClickHouse once at startup and tracked in memory. The 
 
 Bounded `mpsc::channel(N)`. When CH is unavailable: flush fails → Writer stops consuming → channel fills → workers block on `send().await` → RPC load drops. Memory is bounded by `channel_capacity + batch_size`. The Writer retries flush in-place rather than returning to the recv loop, which would drain the channel into an unbounded buffer.
 
+### Price Oracle
+
+Workers enrich each `OrderCreated` event with a USD price by querying the Jupiter Price API for the `give_token_mint` at ingestion time. Prices are cached in-memory with a TTL to avoid redundant requests for the same token within a short window. The `PriceProvider` trait abstracts the oracle behind a port — the same boundary pattern used for RPC and ClickHouse. If the price lookup fails or the token is unknown, the order is stored with `price_usd = NULL` rather than blocking ingestion.
+
 ### Retry Strategy
 
 The process retries in-place rather than crashing when CH is unavailable. The cursor store and the data store are the same CH instance — a restart would fail to read the cursor, resulting in equivalent recovery latency, but with process restart overhead and loss of in-memory batching state.
@@ -85,7 +90,7 @@ The process retries in-place rather than crashing when CH is unavailable. The cu
 ```
 domain/          — OrderEvent, parser (Borsh deserialization)
 application/     — Indexer, Worker, Writer, port traits (Rpc, OrdersRepo, CursorRepo)
-infra/           — SolClient, ClickhouseRepo, SafeRpc, RateLimiter, CircuitBreaker
+infra/           — SolClient, ClickhouseRepo, SafeRpc, RateLimiter, CircuitBreaker, JupiterClient
 bin/ingestion.rs — composition root (wiring, config, signal handling)
 dashboard/       — Next.js app (API routes + React + Recharts)
 ```
@@ -94,7 +99,7 @@ Port traits live in `application` with neutral error types (`RpcError`, `WriteEr
 
 ## Assumptions
 
-- **Stablecoin-only volume.** Dashboard divides `give_amount` by `10^6` (USDC decimals). Non-stablecoin tokens would require a price oracle.
+- **Best-effort pricing.** USD prices come from Jupiter at ingestion time, not at order execution time. Price may differ from the actual swap rate. Orders with unknown tokens are stored without a price.
 - **`give_amount` as `u128`.** The on-chain field is `u256`; orders exceeding `u128` are not supported by the current implementation.
 - **No ClickHouse auth.** Local development only. Production would need network restrictions and credentials.
 - **Backfill only.** No live tail — would require WebSocket subscription.
