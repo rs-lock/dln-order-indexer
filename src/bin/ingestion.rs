@@ -12,7 +12,8 @@ use debridge::{
     },
     infra::{
         circuit_breaker::CircuitBreaker, clickhouse::repo::ClickhouseRepo,
-        rate_limiter::RateLimiter, rpc_client::SolClient, safe_rpc::SafeRpc,
+        jupiter_client::JupiterClient, rate_limiter::RateLimiter, rpc_client::SolClient,
+        safe_rpc::SafeRpc,
     },
 };
 
@@ -27,6 +28,8 @@ struct Config {
     rpc_rate_per_sec: u32,
     channel_capacity: usize,
     page_size: usize,
+    jupiter_url: String,
+    price_cache_ttl: Duration,
 }
 
 impl Config {
@@ -55,6 +58,12 @@ impl Config {
             page_size: var("PAGE_SIZE")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1000),
+            jupiter_url: var("JUPITER_URL").unwrap_or_else(|| "https://api.jup.ag".into()),
+            price_cache_ttl: Duration::from_secs(
+                var("PRICE_CACHE_TTL_SEC")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(60),
+            ),
         }
     }
 }
@@ -100,6 +109,8 @@ async fn main() -> anyhow::Result<()> {
         circuit_breaker,
     ));
 
+    let price_provider = Arc::new(JupiterClient::new(cfg.jupiter_url, cfg.price_cache_ttl));
+
     let cancel = CancellationToken::new();
 
     let signal_cancel = cancel.clone();
@@ -114,6 +125,7 @@ async fn main() -> anyhow::Result<()> {
         rpc,
         repo.clone() as Arc<dyn OrdersRepo>,
         repo as Arc<dyn CursorRepo>,
+        price_provider,
         vec![SRC.to_string(), DST.to_string()],
         cfg.channel_capacity,
         cfg.page_size,

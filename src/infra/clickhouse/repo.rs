@@ -1,12 +1,10 @@
-use std::time::Instant;
-
 use async_trait::async_trait;
 use chrono::Utc;
 use clickhouse::Client;
 
 use crate::{
     application::ports::{CursorRepo, OrdersRepo, WriteError},
-    domain::order::{EnrichedEvent, OrderCreated, OrderEvent, OrderFulfilled},
+    domain::order::{EnrichedEvent, OrderEvent},
     infra::clickhouse::rows::{CursorRow, OrderCreatedRow, OrderFulfilledRow},
 };
 

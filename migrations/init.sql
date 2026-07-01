@@ -5,6 +5,8 @@ CREATE DATABASE IF NOT EXISTS orders;
     order_id String,
     give_amount UInt128,
     give_token String,
+    price_usd Nullable(Float64),
+    decimals Nullable(UInt8),
     blocktime DateTime64(0),
     date Date DEFAULT toDate(blocktime)
 ) ENGINE = ReplacingMergeTree()
