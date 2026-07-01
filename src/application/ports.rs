@@ -51,3 +51,20 @@ pub trait CursorRepo: Send + Sync {
     async fn load_cursor(&self, program: &str) -> anyhow::Result<Option<String>>;
     async fn save_cursor(&self, cursor: &str, program: &str) -> anyhow::Result<()>;
 }
+
+#[derive(Copy, Clone)]
+pub struct TokenPriceInfo {
+    pub usd_price: f64,
+    pub decimals: u8,
+}
+
+#[async_trait]
+pub trait PriceProvider: Send + Sync {
+    async fn get_price(&self, mint: &str) -> Result<Option<TokenPriceInfo>, PriceError>;
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum PriceError {
+    #[error(transparent)]
+    Transport(#[from] anyhow::Error),
+}

@@ -4,7 +4,7 @@ use tokio::{sync::mpsc, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use crate::application::{
-    ports::{CursorRepo, OrdersRepo, Rpc},
+    ports::{CursorRepo, OrdersRepo, PriceProvider, Rpc},
     worker::Worker,
     writer::Writer,
 };
@@ -15,6 +15,7 @@ pub struct Indexer {
     rpc: Arc<dyn Rpc>,
     orders_repo: Arc<dyn OrdersRepo>,
     cursor_repo: Arc<dyn CursorRepo>,
+    price_provider: Arc<dyn PriceProvider>,
     programs: Vec<String>,
     channel_capacity: usize,
     page_size: usize,
@@ -28,6 +29,7 @@ impl Indexer {
         rpc: Arc<dyn Rpc>,
         orders_repo: Arc<dyn OrdersRepo>,
         cursor_repo: Arc<dyn CursorRepo>,
+        price_provider: Arc<dyn PriceProvider>,
         programs: Vec<String>,
         channel_capacity: usize,
         page_size: usize,
@@ -38,6 +40,7 @@ impl Indexer {
             rpc,
             orders_repo,
             cursor_repo,
+            price_provider,
             programs,
             channel_capacity,
             page_size,
@@ -67,6 +70,7 @@ impl Indexer {
                 program,
                 self.rpc.clone(),
                 self.cursor_repo.clone(),
+                self.price_provider.clone(),
                 tx.clone(),
                 self.page_size,
             );

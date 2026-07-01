@@ -101,6 +101,7 @@ impl Writer {
         match res {
             FlushOutcome::Cancelled => {}
             FlushOutcome::Flushed => {
+                tracing::info!(events = batch.len(), cursors = cursor_map.len(), "flushed batch");
                 self.save_cursors(cursor_map).await?;
                 cursor_map.clear();
                 batch.clear();

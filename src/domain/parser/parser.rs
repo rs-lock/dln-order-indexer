@@ -110,6 +110,8 @@ fn try_build_created(order: &CreatedOrderEvent, id: [u8; 32]) -> Option<OrderCre
         order_id: id,
         give_amount: u128::from_be_bytes(amount),
         give_token: Pubkey::new_from_array(mint),
+        price_usd: None,
+        decimals: None,
     })
 }
 

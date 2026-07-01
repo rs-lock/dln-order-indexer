@@ -5,8 +5,11 @@ use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    application::ports::{CursorRepo, Rpc, WriterMsg},
-    domain::parser::parser::parse_transaction,
+    application::ports::{CursorRepo, PriceProvider, Rpc, WriterMsg},
+    domain::{
+        order::{OrderCreated, OrderEvent},
+        parser::parser::parse_transaction,
+    },
 };
 
 enum FetchOutcome {
@@ -18,6 +21,7 @@ pub struct Worker {
     program_id: String,
     rpc: Arc<dyn Rpc>,
     cursor_repo: Arc<dyn CursorRepo>,
+    price_provider: Arc<dyn PriceProvider>,
     sender: Sender<WriterMsg>,
     page_size: usize,
 }
@@ -27,6 +31,7 @@ impl Worker {
         program_id: String,
         rpc: Arc<dyn Rpc>,
         cursor_repo: Arc<dyn CursorRepo>,
+        price_provider: Arc<dyn PriceProvider>,
         sender: Sender<WriterMsg>,
         page_size: usize,
     ) -> Self {
@@ -34,6 +39,7 @@ impl Worker {
             program_id,
             rpc,
             cursor_repo,
+            price_provider,
             sender,
             page_size,
         }
@@ -106,7 +112,12 @@ impl Worker {
         while let Some(res) = stream.next().await {
             match res {
                 Ok(Some(tx)) => {
-                    let event = parse_transaction(&tx);
+                    let mut event = parse_transaction(&tx);
+                    for order in &mut event.order_events {
+                        if let OrderEvent::Created(created) = order {
+                            self.try_fill_with_price(created).await;
+                        }
+                    }
                     let _ = self.sender.send(WriterMsg::Data(event)).await;
                 }
                 Ok(None) => {}
@@ -130,5 +141,20 @@ impl Worker {
         };
 
         Ok(FetchOutcome::Continue(last_sig))
+    }
+
+    async fn try_fill_with_price(&self, order: &mut OrderCreated) {
+        match self
+            .price_provider
+            .get_price(&order.give_token.to_string())
+            .await
+        {
+            Ok(Some(info)) => {
+                order.price_usd = Some(info.usd_price);
+                order.decimals = Some(info.decimals);
+            }
+            Ok(None) => tracing::warn!(mint = %order.give_token, "unknown token"),
+            Err(e) => tracing::warn!(?e, "price fetch failed"),
+        }
     }
 }

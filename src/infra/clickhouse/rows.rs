@@ -10,6 +10,8 @@ pub struct OrderCreatedRow {
     pub order_id: String,
     pub give_amount: u128,
     pub give_token: String,
+    pub price_usd: Option<f64>,
+    pub decimals: Option<u8>,
     #[serde(with = "clickhouse::serde::chrono::datetime64::secs")]
     pub blocktime: chrono::DateTime<Utc>,
 }
@@ -30,6 +32,8 @@ impl OrderCreatedRow {
             order_id: bs58::encode(order_event.order_id).into_string(),
             give_amount: order_event.give_amount,
             give_token: order_event.give_token.to_string(),
+            price_usd: order_event.price_usd,
+            decimals: order_event.decimals,
             blocktime: chrono::DateTime::from_timestamp_secs(blocktime)
                 .expect("block_time validated upstream"),
         }

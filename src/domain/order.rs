@@ -17,6 +17,8 @@ pub struct OrderCreated {
     pub order_id: [u8; 32],
     pub give_amount: u128,
     pub give_token: Pubkey,
+    pub price_usd: Option<f64>,
+    pub decimals: Option<u8>,
 }
 
 #[derive(Debug)]
