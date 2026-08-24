@@ -97,9 +97,16 @@ impl Indexer {
             }
         }
 
-        if let Err(e) = writer_handle.await {
-            tracing::error!(error = %e, "writer task panicked");
-            had_failure = true;
+        match writer_handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                tracing::error!(error = %e, "writer failed");
+                had_failure = true;
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "writer task panicked");
+                had_failure = true;
+            }
         }
 
         if had_failure {

@@ -40,7 +40,7 @@ impl Writer {
 }
 
 impl Writer {
-    pub async fn run(&mut self, cancel: CancellationToken) {
+    pub async fn run(&mut self, cancel: CancellationToken) -> anyhow::Result<()> {
         let mut pending: HashMap<String, String> = HashMap::new();
         let mut batch: Vec<EnrichedEvent> = Vec::with_capacity(self.capacity);
 
@@ -50,9 +50,7 @@ impl Writer {
                 biased;
                 maybe_tx = self.receiver.recv() => {
                     let Some(msg) = maybe_tx else {
-                        if let Err(e) = self.flush_and_clear(&mut batch, &mut pending, &cancel).await {
-                            tracing::error!("flush error {e}");
-                        }
+                        self.flush_and_clear(&mut batch, &mut pending, &cancel).await?;
                         break;
                     };
 
@@ -63,9 +61,7 @@ impl Writer {
                             }
 
                             if batch.len() >= self.capacity {
-                                if let Err(e) = self.flush_and_clear(&mut batch, &mut pending, &cancel).await {
-                                    tracing::error!("flush error {e}");
-                                }
+                                self.flush_and_clear(&mut batch, &mut pending, &cancel).await?;
                             };
                         },
                         WriterMsg::Checkpoint { program, signature } => {
@@ -80,13 +76,13 @@ impl Writer {
 
                 _ = timer.tick() => {
                     tracing::debug!("interval tick, flushing");
-                    if let Err(e) = self.flush_and_clear(&mut batch, &mut pending, &cancel).await {
-                        tracing::error!("flush error {e}");
-                    };
+                    self.flush_and_clear(&mut batch, &mut pending, &cancel).await?;
                 }
 
             }
         }
+
+        Ok(())
     }
 
     async fn flush_and_clear(
@@ -117,7 +113,7 @@ impl Writer {
         Ok(())
     }
 
-    async fn flush_batch(&self, batch: &Vec<EnrichedEvent>) -> Result<(), WriteError> {
+    async fn flush_batch(&self, batch: &[EnrichedEvent]) -> Result<(), WriteError> {
         if !batch.is_empty() {
             self.repository.insert_events(batch).await?;
         }
