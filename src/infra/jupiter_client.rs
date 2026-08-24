@@ -44,7 +44,7 @@ struct JupiterTokenPrice {
 impl PriceProvider for JupiterClient {
     async fn get_price(&self, mint: &str) -> Result<Option<TokenPriceInfo>, PriceError> {
         let cached = {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             cache.get(mint).cloned()
         };
 
@@ -73,7 +73,7 @@ impl PriceProvider for JupiterClient {
                     usd_price: data.usd_price,
                     decimals: data.decimals,
                 };
-                self.cache.write().unwrap().insert(
+                self.cache.write().unwrap_or_else(|e| e.into_inner()).insert(
                     mint.to_string(),
                     CachedPrice {
                         info,

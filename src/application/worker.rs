@@ -45,7 +45,6 @@ impl Worker {
         }
     }
 
-    // TODO: fetch signatures by cursor, fan out to RPC, send Transactions downstream
     pub async fn run_rpc(&self, cancel_token: CancellationToken) -> anyhow::Result<()> {
         let mut cursor = self.cursor_repo.load_cursor(&self.program_id).await?;
         loop {
@@ -55,7 +54,7 @@ impl Worker {
                     break;
                 }
                 res = self.fetch(cursor.as_deref()) => {
-                    match res? {                     // permanent Err пробрасывается → процесс выходит
+                    match res? {
                         FetchOutcome::Done => {
                             tracing::info!(program_id = %self.program_id, "backfill done");
                             break;
@@ -94,22 +93,29 @@ impl Worker {
             .map(|sig| {
                 let rpc = self.rpc.clone();
                 async move {
+                    const MAX_ATTEMPTS: u32 = 8;
                     let mut delay = Duration::from_millis(100);
-                    loop {
+                    let mut attempts = 0u32;
+                    let result = loop {
                         match rpc.get_transaction(&sig).await {
-                            Ok(v) => return Ok(v),
+                            Ok(v) => break Ok(v),
                             Err(e) if e.is_transient() => {
+                                attempts += 1;
+                                if attempts >= MAX_ATTEMPTS {
+                                    break Err(e);
+                                }
                                 tokio::time::sleep(delay).await;
                                 delay = (delay * 2).min(Duration::from_secs(30));
                             }
-                            Err(e) => return Err(e),
+                            Err(e) => break Err(e),
                         }
-                    }
+                    };
+                    (sig, result)
                 }
             })
             .buffer_unordered(20);
 
-        while let Some(res) = stream.next().await {
+        while let Some((sig, res)) = stream.next().await {
             match res {
                 Ok(Some(tx)) => {
                     let mut event = parse_transaction(&tx);
@@ -118,11 +124,16 @@ impl Worker {
                             self.try_fill_with_price(created).await;
                         }
                     }
-                    let _ = self.sender.send(WriterMsg::Data(event)).await;
+                    self.sender
+                        .send(WriterMsg::Data(event))
+                        .await
+                        .map_err(|_| anyhow::anyhow!("writer channel closed"))?;
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    tracing::warn!(%sig, "transaction not found, cursor advances past it");
+                }
                 Err(e) if e.is_transient() => {
-                    tracing::warn!(%e, "get_transaction transient");
+                    tracing::warn!(%sig, %e, "get_transaction exhausted retries, skipping signature");
                 }
                 Err(e) => {
                     return Err(e.into());
@@ -131,13 +142,13 @@ impl Worker {
         }
 
         if let Some(last) = &last_sig {
-            let _ = self
-                .sender
+            self.sender
                 .send(WriterMsg::Checkpoint {
                     program: self.program_id.clone(),
                     signature: last.clone(),
                 })
-                .await;
+                .await
+                .map_err(|_| anyhow::anyhow!("writer channel closed"))?;
         };
 
         Ok(FetchOutcome::Continue(last_sig))
